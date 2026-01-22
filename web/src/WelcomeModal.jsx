@@ -35,7 +35,7 @@ function WelcomeModal({ onClose, onContinue }) {
           fontSize: '26px',
           textAlign: 'center',
         }}>
-          Welcome to Lydia's Lit Friends! 📚
+          Welcome to Lydia's Literature Friends! 📚
         </h2>
         
         <p style={{
@@ -85,7 +85,10 @@ function WelcomeModal({ onClose, onContinue }) {
             <li style={{ marginBottom: '10px' }}>
               <strong style={{ color: '#d4af37' }}>Share the love</strong> — Feel free to add your own books to the library for others to borrow!
             </li>
-            <li>
+            <li style={{ marginBottom: '10px' }}>
+              <strong style={{ color: '#d4af37' }}>Only add books you've read</strong> — This keeps your reading journal accurate and helps others know you can discuss the book!
+            </li>
+            <li style={{ marginBottom: '10px' }}>
               <strong style={{ color: '#d4af37' }}>Communicate</strong> — If a book is requested, try to coordinate a handoff or drop-off.
             </li>
             <li>
