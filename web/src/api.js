@@ -95,3 +95,19 @@ export async function addLocation(firstName, lastName, city, neighborhood) {
   
   return response.json();
 }
+
+export async function getMembers() {
+  const response = await fetch(`${API_BASE}/getMembers`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch members');
+  }
+  return response.json();
+}
+
+export async function getReadingJournal(libraryCardNumber) {
+  const response = await fetch(`${API_BASE}/getReadingJournal?libraryCardNumber=${encodeURIComponent(libraryCardNumber)}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch reading journal');
+  }
+  return response.json();
+}

@@ -6,6 +6,7 @@ import RequestModal from './RequestModal';
 import AddBookModal from './AddBookModal';
 import WelcomeModal from './WelcomeModal';
 import RegisterModal from './RegisterModal';
+import ReadingJournal from './ReadingJournal';
 import { getBooks, checkoutBook, requestBook } from './api';
 import logo from './library-logo.png';
 
@@ -19,6 +20,7 @@ function App() {
   const [showAddBook, setShowAddBook] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [showReadingJournal, setShowReadingJournal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocationFilters, setSelectedLocationFilters] = useState([]);
   const [showLocationFilter, setShowLocationFilter] = useState(false);
@@ -212,6 +214,11 @@ function App() {
     (a.title || '').localeCompare(b.title || '')
   );
 
+  // Show Reading Journal page
+  if (showReadingJournal) {
+    return <ReadingJournal onBack={() => setShowReadingJournal(false)} />;
+  }
+
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
       <header style={{ marginBottom: '30px' }}>
@@ -360,6 +367,43 @@ function App() {
           >
             <span style={{ fontSize: '20px' }}>👤</span>
             <span>Join the book club!</span>
+          </button>
+          <button
+            onClick={() => setShowReadingJournal(true)}
+            style={{
+              flex: '1 1 200px',
+              minWidth: '200px',
+              padding: '14px 24px',
+              backgroundColor: 'transparent',
+              color: '#b8a88a',
+              border: '2px solid #7a6f5d',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: '600',
+              fontFamily: "'Lato', sans-serif",
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+            onMouseOver={(e) => {
+              e.target.style.backgroundColor = '#7a6f5d';
+              e.target.style.color = '#f5e6c8';
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.backgroundColor = 'transparent';
+              e.target.style.color = '#b8a88a';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>📖</span>
+            <span>Reading Journal</span>
           </button>
         </div>
         

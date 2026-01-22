@@ -418,6 +418,8 @@ module.exports = {
   createReadingJournalSheet,
   addToReadingJournal,
   getLibraryCardByName,
+  getMembers,
+  getReadingJournal,
 };
 
 /**
@@ -547,5 +549,69 @@ async function getLibraryCardByName(firstName) {
   } catch (error) {
     console.error('Error getting library card by name:', error);
     return null;
+  }
+}
+
+/**
+ * Gets all members from the Locations sheet
+ * @returns {Promise<Array>} Array of member objects with firstName, lastNameInitial, libraryCardNumber
+ */
+async function getMembers() {
+  const sheets = getSheetsClient();
+  const spreadsheetId = process.env.SHEET_ID;
+  
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Locations!A2:F',
+    });
+    
+    const rows = response.data.values || [];
+    return rows.map(row => ({
+      firstName: row[0] || '',
+      lastName: row[1] || '',
+      lastNameInitial: row[2] || '',
+      city: row[3] || '',
+      neighborhood: row[4] || '',
+      libraryCardNumber: parseInt(row[5], 10) || 0,
+    })).filter(member => member.firstName && member.libraryCardNumber);
+  } catch (error) {
+    console.error('Error getting members:', error);
+    return [];
+  }
+}
+
+/**
+ * Gets the reading journal entries for a library card number
+ * @param {number} libraryCardNumber - The library card number
+ * @returns {Promise<Array>} Array of journal entries with isbn, title, dateAdded, notes
+ */
+async function getReadingJournal(libraryCardNumber) {
+  const sheets = getSheetsClient();
+  const spreadsheetId = process.env.SHEET_ID;
+  
+  const sheetTitle = `Journal-${libraryCardNumber}`;
+  
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetTitle}!A2:D`,
+    });
+    
+    const rows = response.data.values || [];
+    return rows.map(row => ({
+      isbn: row[0] || '',
+      title: row[1] || '',
+      dateAdded: row[2] || '',
+      notes: row[3] || '',
+    })).filter(entry => entry.isbn);
+  } catch (error) {
+    // If sheet doesn't exist, return empty array
+    if (error.message?.includes('Unable to parse range') || error.code === 400) {
+      console.log(`Reading journal sheet ${sheetTitle} not found`);
+      return [];
+    }
+    console.error('Error getting reading journal:', error);
+    return [];
   }
 }
