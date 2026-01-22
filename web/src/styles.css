@@ -1,0 +1,127 @@
+/* Lydia's Lit(erature) Friends - Dark Theme with Gold Accents */
+
+/* Import elegant fonts */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600&family=Lato:wght@300;400;500;600&display=swap');
+
+:root {
+  /* Dark theme colors */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #141414;
+  --bg-card: #1a1a1a;
+  --bg-card-hover: #222222;
+  --bg-modal: #1a1a1a;
+  
+  /* Gold accent colors */
+  --gold-primary: #d4af37;
+  --gold-secondary: #c9a227;
+  --gold-light: #e8d48b;
+  --gold-dark: #8b7355;
+  
+  /* Text colors */
+  --text-primary: #f5e6c8;
+  --text-secondary: #b8a88a;
+  --text-muted: #7a6f5d;
+  
+  /* Accent colors */
+  --accent-success: #4a7c59;
+  --accent-danger: #8b3a3a;
+  --accent-info: #4a6fa5;
+  
+  /* Border colors */
+  --border-color: #2a2a2a;
+  --border-gold: rgba(212, 175, 55, 0.3);
+  
+  /* Shadows */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+  --shadow-gold: 0 4px 12px rgba(212, 175, 55, 0.2);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Playfair Display', Georgia, serif;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gold-dark);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-secondary);
+}
+
+/* Selection styling */
+::selection {
+  background: var(--gold-primary);
+  color: var(--bg-primary);
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid var(--gold-primary);
+  outline-offset: 2px;
+}
+
+/* Button base styles */
+button {
+  font-family: 'Lato', sans-serif;
+  transition: all 0.2s ease;
+}
+
+/* Input base styles */
+input, select, textarea {
+  font-family: 'Lato', sans-serif;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+input::placeholder {
+  color: var(--text-muted);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.1);
+}
+
+/* Links */
+a {
+  color: var(--gold-primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--gold-light);
+}
