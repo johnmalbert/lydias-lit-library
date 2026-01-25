@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
 import BookList from './BookList';
 import CheckoutModal from './CheckoutModal';
@@ -9,6 +9,21 @@ import RegisterModal from './RegisterModal';
 import ReadingJournal from './ReadingJournal';
 import { getBooks, checkoutBook, requestBook } from './api';
 import logo from './library-logo.png';
+
+const TAGLINES = [
+  "Was your New Year's resolution to read more? Start here!",
+  "Put that phone down, grab a book instead",
+  "This kind of weather just makes me want to curl up with a good book",
+  "Your couch is calling. So is that unread book on your shelf.",
+  "Bored? Sounds like you need a new book.",
+  "There's nothing like getting lost in a good story",
+  "Find your next page-turner here",
+  "Because sometimes you just need to escape into a book",
+  "Rainy day? Perfect reading weather.",
+  "Your future favorite book might be right here",
+  "Take a break from the screen. Read something real.",
+  "Nothing beats that new book feeling",
+];
 
 function App() {
   const [books, setBooks] = useState([]);
@@ -29,6 +44,9 @@ function App() {
   const [scanError, setScanError] = useState('');
   const videoRef = useRef(null);
   const codeReaderRef = useRef(null);
+
+  // Pick a random tagline once per page load
+  const tagline = useMemo(() => TAGLINES[Math.floor(Math.random() * TAGLINES.length)], []);
 
   React.useEffect(() => {
     loadBooks();
@@ -242,7 +260,7 @@ function App() {
             fontStyle: 'italic',
             letterSpacing: '0.5px',
           }}>
-            Was your New Year's resolution to read more? Start here!
+            {tagline}
           </p>
         </div>
         

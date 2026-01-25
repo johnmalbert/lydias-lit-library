@@ -89,7 +89,7 @@ function WelcomeModal({ onClose, onContinue }) {
               <strong style={{ color: '#d4af37' }}>Only add books you've read</strong> — This keeps your reading journal accurate and helps others know you can discuss the book!
             </li>
             <li style={{ marginBottom: '10px' }}>
-              <strong style={{ color: '#d4af37' }}>Communicate</strong> — If a book is requested, try to coordinate a handoff or drop-off.
+              <strong style={{ color: '#d4af37' }}>Communicate</strong> — If a book is requested, try to coordinate a handoff or drop-off. Work with Lydia the librarian to get in touch with other readers. 
             </li>
             <li>
               <strong style={{ color: '#d4af37' }}>Any questions or issues?</strong> — If you have any questions or encounter any issues, please reach out to the head librarian (Lydia).

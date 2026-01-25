@@ -71,8 +71,11 @@ function AddBookModal({ onClose, onSuccess }) {
         (result, error) => {
           if (result) {
             const scannedText = result.getText();
-            // ISBN can be 10 or 13 digits
-            if (/^\d{10}(\d{3})?$/.test(scannedText)) {
+            // ISBN-13 must start with 978 or 979, ISBN-10 is 10 digits (last can be X)
+            const isValidIsbn13 = /^(978|979)\d{10}$/.test(scannedText);
+            const isValidIsbn10 = /^\d{9}[\dX]$/.test(scannedText);
+            
+            if (isValidIsbn13 || isValidIsbn10) {
               setIsbn(scannedText);
               setError('');
               stopScanning();
