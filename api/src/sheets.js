@@ -208,7 +208,7 @@ async function addBook(bookData) {
     throw new Error(`Book with ISBN ${normalizedIsbn} already exists in the library`);
   }
 
-  // Create row in the order: ISBN, Cover, Title, Authors, Reading Level, Location, Publishers, Pages, Genres, Language, Notes
+  // Create row in the order: ISBN, Cover, Title, Authors, Reading Level, Location, Publishers, Pages, Genres, Language, Notes, RequestedBy, Description
   // Note: Cover should be a formula like =IMAGE("url") to match the sheet's pattern
   const coverFormula = bookData.cover ? `=IMAGE("${bookData.cover}")` : '';
   
@@ -224,11 +224,13 @@ async function addBook(bookData) {
     bookData.genres,
     bookData.language,
     bookData.notes || '',
+    '', // RequestedBy - empty for new books
+    bookData.description || '',
   ];
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `Inventory!A:K`,
+    range: `Inventory!A:M`,
     valueInputOption: 'USER_ENTERED', // This allows formulas to be processed
     insertDataOption: 'INSERT_ROWS',
     resource: {
@@ -239,7 +241,7 @@ async function addBook(bookData) {
   // Add to the destination user's reading journal
   const libraryCardNumber = await getLibraryCardByName(bookData.location);
   if (libraryCardNumber) {
-    await addToReadingJournal(libraryCardNumber, normalizedIsbn, bookData.title, bookData.notes);
+    await addToReadingJournal(libraryCardNumber, normalizedIsbn, bookData.title, bookData.notes, bookData.finished);
   }
 }
 
@@ -420,6 +422,9 @@ module.exports = {
   getLibraryCardByName,
   getMembers,
   getReadingJournal,
+  updateJournalEntry,
+  reorderJournal,
+  updateJournalFinished,
 };
 
 /**
@@ -476,8 +481,9 @@ async function createReadingJournalSheet(libraryCardNumber, firstName) {
  * @param {string} isbn - Book ISBN
  * @param {string} title - Book title
  * @param {string} notes - Optional notes
+ * @param {boolean} finished - Whether the book is already finished
  */
-async function addToReadingJournal(libraryCardNumber, isbn, title, notes = '') {
+async function addToReadingJournal(libraryCardNumber, isbn, title, notes = '', finished = false) {
   const sheets = getSheetsClient();
   const spreadsheetId = process.env.SHEET_ID;
   
@@ -485,7 +491,7 @@ async function addToReadingJournal(libraryCardNumber, isbn, title, notes = '') {
   const dateAdded = new Date().toLocaleDateString('en-US');
   
   try {
-    // Check if book already exists in the journal
+    // Check if book already exists in the journal and get count for order
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetTitle}!A:A`,
@@ -497,14 +503,17 @@ async function addToReadingJournal(libraryCardNumber, isbn, title, notes = '') {
       return; // Book already in journal, don't add duplicate
     }
     
-    // Add the book entry
+    // Order is count of existing entries (excluding header) + 1
+    const order = existingIsbns.length; // includes header, so this is correct for 1-based order
+    
+    // Add the book entry with order and finished status
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `${sheetTitle}!A:D`,
+      range: `${sheetTitle}!A:F`,
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       resource: {
-        values: [[isbn, title, dateAdded, notes]],
+        values: [[isbn, title, dateAdded, notes, order, finished ? 'Yes' : '']],
       },
     });
     
@@ -595,16 +604,23 @@ async function getReadingJournal(libraryCardNumber) {
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetTitle}!A2:D`,
+      range: `${sheetTitle}!A2:F`,
     });
     
     const rows = response.data.values || [];
-    return rows.map(row => ({
+    const entries = rows.map((row, index) => ({
       isbn: row[0] || '',
       title: row[1] || '',
       dateAdded: row[2] || '',
       notes: row[3] || '',
+      order: row[4] ? parseInt(row[4], 10) : index + 1,
+      finished: (row[5] || '').toLowerCase() === 'yes',
     })).filter(entry => entry.isbn);
+    
+    // Sort by order
+    entries.sort((a, b) => a.order - b.order);
+    
+    return entries;
   } catch (error) {
     // If sheet doesn't exist, return empty array
     if (error.message?.includes('Unable to parse range') || error.code === 400) {
@@ -613,5 +629,150 @@ async function getReadingJournal(libraryCardNumber) {
     }
     console.error('Error getting reading journal:', error);
     return [];
+  }
+}
+
+/**
+ * Updates a journal entry's notes
+ * @param {number} libraryCardNumber - The library card number
+ * @param {string} isbn - The book ISBN
+ * @param {string} notes - The new notes
+ */
+async function updateJournalEntry(libraryCardNumber, isbn, notes) {
+  const sheets = getSheetsClient();
+  const spreadsheetId = process.env.SHEET_ID;
+  
+  const sheetTitle = `Journal-${libraryCardNumber}`;
+  
+  try {
+    // Read the journal to find the row
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetTitle}!A:E`,
+    });
+    
+    const rows = response.data.values || [];
+    const rowIndex = rows.findIndex((row, idx) => 
+      idx > 0 && row[0]?.toString().trim() === isbn?.toString().trim()
+    );
+    
+    if (rowIndex === -1) {
+      throw new Error(`Book with ISBN ${isbn} not found in journal`);
+    }
+    
+    // Update the notes column (column D)
+    const rowNumber = rowIndex + 1; // 1-based row number
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetTitle}!D${rowNumber}`,
+      valueInputOption: 'RAW',
+      resource: {
+        values: [[notes]],
+      },
+    });
+    
+    console.log(`Updated notes for ${isbn} in journal for card ${libraryCardNumber}`);
+  } catch (error) {
+    console.error('Error updating journal entry:', error);
+    throw error;
+  }
+}
+
+/**
+ * Reorders journal entries
+ * @param {number} libraryCardNumber - The library card number
+ * @param {Array<{isbn: string, order: number}>} orderUpdates - Array of ISBN and new order pairs
+ */
+async function reorderJournal(libraryCardNumber, orderUpdates) {
+  const sheets = getSheetsClient();
+  const spreadsheetId = process.env.SHEET_ID;
+  
+  const sheetTitle = `Journal-${libraryCardNumber}`;
+  
+  try {
+    // Read the journal to find rows
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetTitle}!A:E`,
+    });
+    
+    const rows = response.data.values || [];
+    
+    // Build batch update data
+    const data = [];
+    for (const update of orderUpdates) {
+      const rowIndex = rows.findIndex((row, idx) => 
+        idx > 0 && row[0]?.toString().trim() === update.isbn?.toString().trim()
+      );
+      
+      if (rowIndex !== -1) {
+        const rowNumber = rowIndex + 1;
+        data.push({
+          range: `${sheetTitle}!E${rowNumber}`,
+          values: [[update.order]],
+        });
+      }
+    }
+    
+    if (data.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        resource: {
+          valueInputOption: 'RAW',
+          data,
+        },
+      });
+    }
+    
+    console.log(`Reordered journal for card ${libraryCardNumber}`);
+  } catch (error) {
+    console.error('Error reordering journal:', error);
+    throw error;
+  }
+}
+
+/**
+ * Updates a journal entry's finished status
+ * @param {number} libraryCardNumber - The library card number
+ * @param {string} isbn - The book ISBN
+ * @param {boolean} finished - Whether the book is finished
+ */
+async function updateJournalFinished(libraryCardNumber, isbn, finished) {
+  const sheets = getSheetsClient();
+  const spreadsheetId = process.env.SHEET_ID;
+  
+  const sheetTitle = `Journal-${libraryCardNumber}`;
+  
+  try {
+    // Read the journal to find the row
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetTitle}!A:F`,
+    });
+    
+    const rows = response.data.values || [];
+    const rowIndex = rows.findIndex((row, idx) => 
+      idx > 0 && row[0]?.toString().trim() === isbn?.toString().trim()
+    );
+    
+    if (rowIndex === -1) {
+      throw new Error(`Book with ISBN ${isbn} not found in journal`);
+    }
+    
+    // Update the finished column (column F)
+    const rowNumber = rowIndex + 1; // 1-based row number
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetTitle}!F${rowNumber}`,
+      valueInputOption: 'RAW',
+      resource: {
+        values: [[finished ? 'Yes' : '']],
+      },
+    });
+    
+    console.log(`Updated finished status for ${isbn} in journal for card ${libraryCardNumber}`);
+  } catch (error) {
+    console.error('Error updating journal finished status:', error);
+    throw error;
   }
 }

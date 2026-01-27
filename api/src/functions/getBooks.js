@@ -1,5 +1,5 @@
 const { app } = require('@azure/functions');
-const { readSheet } = require('../sheets');
+const { readSheet, getMembers } = require('../sheets');
 
 app.http('getBooks', {
   methods: ['GET'],
@@ -7,8 +7,18 @@ app.http('getBooks', {
   route: 'getBooks',
   handler: async (request, context) => {
     try {
-      // Read inventory sheet
-      const inventory = await readSheet('Inventory');
+      // Read inventory sheet and members
+      const [inventory, members] = await Promise.all([
+        readSheet('Inventory'),
+        getMembers(),
+      ]);
+
+      // Create a lookup map for members by first name (case-insensitive)
+      const membersByName = {};
+      for (const member of members) {
+        const key = member.firstName.toLowerCase();
+        membersByName[key] = member;
+      }
 
       // Map inventory to book objects
       const books = inventory.map(book => {
@@ -23,6 +33,10 @@ app.http('getBooks', {
           }
         }
 
+        // Look up member details for location
+        const locationName = (book.Location || '').trim();
+        const member = locationName ? membersByName[locationName.toLowerCase()] : null;
+
         return {
           isbn: isbnKey,
           title: (book.Title || book.title || '').trim(),
@@ -34,8 +48,15 @@ app.http('getBooks', {
           genres: (book.Genres || '').trim(),
           language: (book.Language || '').trim(),
           notes: (book.Notes || '').trim(),
-          location: (book.Location || '').trim(),
+          location: locationName,
+          locationDetails: member ? {
+            firstName: member.firstName,
+            lastInitial: member.lastNameInitial,
+            city: member.city,
+            neighborhood: member.neighborhood,
+          } : null,
           requestedBy: (book.RequestedBy || book.requestedBy || '').trim(),
+          description: (book.Description || '').trim(),
         };
       });
 

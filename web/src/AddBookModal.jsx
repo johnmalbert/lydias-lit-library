@@ -8,6 +8,7 @@ function AddBookModal({ onClose, onSuccess }) {
   const [bookInfo, setBookInfo] = useState(null);
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
+  const [markAsRead, setMarkAsRead] = useState(false);
   const [locations, setLocations] = useState([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [lookingUp, setLookingUp] = useState(false);
@@ -178,6 +179,7 @@ function AddBookModal({ onClose, onSuccess }) {
           genres: manualData.genres.trim(),
           language: '',
           notes: notes,
+          finished: markAsRead,
         });
       } else {
         // Submit book from API lookup
@@ -193,6 +195,8 @@ function AddBookModal({ onClose, onSuccess }) {
           genres: bookInfo.genres,
           language: bookInfo.language,
           notes: notes,
+          description: bookInfo.description,
+          finished: markAsRead,
         });
       }
       onSuccess();
@@ -676,6 +680,41 @@ function AddBookModal({ onClose, onSuccess }) {
                     color: '#f5e6c8',
                   }}
                 />
+              </div>
+
+              {/* Mark as Read */}
+              <div style={{ marginBottom: '20px' }}>
+                <label 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    cursor: 'pointer',
+                    padding: '12px',
+                    backgroundColor: markAsRead ? 'rgba(74, 124, 89, 0.15)' : '#141414',
+                    border: markAsRead ? '2px solid rgba(74, 124, 89, 0.5)' : '2px solid #2a2a2a',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={markAsRead}
+                    onChange={(e) => setMarkAsRead(e.target.checked)}
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      accentColor: '#4a7c59',
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span style={{ 
+                    fontWeight: '600', 
+                    color: markAsRead ? '#4a7c59' : '#b8a88a',
+                  }}>
+                    {markAsRead ? '✓ Already finished reading' : 'Mark as already read'}
+                  </span>
+                </label>
               </div>
             </>
           )}

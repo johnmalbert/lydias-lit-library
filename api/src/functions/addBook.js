@@ -8,7 +8,7 @@ app.http('addBook', {
   handler: async (request, context) => {
     try {
       const body = await request.json();
-      const { isbn, cover, title, authors, readingLevel, location, publishers, pages, genres, language, notes } = body;
+      const { isbn, cover, title, authors, readingLevel, location, publishers, pages, genres, language, notes, description, finished } = body;
 
       // Require title, authors, and location for manual entries
       if (!title || !authors || !location) {
@@ -30,6 +30,8 @@ app.http('addBook', {
         genres,
         language,
         notes,
+        description,
+        finished,
       });
 
       return {

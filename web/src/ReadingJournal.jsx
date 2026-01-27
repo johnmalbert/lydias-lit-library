@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getMembers, getReadingJournal, getBooks } from './api';
+import { getMembers, getReadingJournal, getBooks, updateJournalEntry, reorderJournal, updateJournalFinished } from './api';
 import noImage from './no-image-available.png';
 
 function ReadingJournal({ onBack }) {
@@ -9,6 +9,16 @@ function ReadingJournal({ onBack }) {
   const [allBooks, setAllBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingJournal, setLoadingJournal] = useState(false);
+  
+  // Edit mode state
+  const [editMode, setEditMode] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authInput, setAuthInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [editingNotes, setEditingNotes] = useState({}); // {isbn: notes}
+  const [savingNotes, setSavingNotes] = useState({});
+  const [savingFinished, setSavingFinished] = useState({});
+  const [draggedItem, setDraggedItem] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -31,6 +41,8 @@ function ReadingJournal({ onBack }) {
   async function handleMemberSelect(member) {
     setSelectedMember(member);
     setLoadingJournal(true);
+    setEditMode(false);
+    setEditingNotes({});
     try {
       const journal = await getReadingJournal(member.libraryCardNumber);
       setJournalEntries(journal);
@@ -47,6 +59,118 @@ function ReadingJournal({ onBack }) {
     return allBooks.find(book => 
       (book.ISBN || book.isbn || '').toString().trim() === isbn?.toString().trim()
     );
+  }
+
+  // Edit mode functions
+  function handleEditClick() {
+    setShowAuthModal(true);
+    setAuthInput('');
+    setAuthError('');
+  }
+
+  function handleAuthSubmit() {
+    if (parseInt(authInput, 10) === selectedMember.libraryCardNumber) {
+      setEditMode(true);
+      setShowAuthModal(false);
+      setAuthError('');
+      // Initialize editing notes with current values
+      const notesMap = {};
+      journalEntries.forEach(entry => {
+        notesMap[entry.isbn] = entry.notes || '';
+      });
+      setEditingNotes(notesMap);
+    } else {
+      setAuthError('Incorrect library card number');
+    }
+  }
+
+  async function handleSaveNotes(isbn) {
+    setSavingNotes(prev => ({ ...prev, [isbn]: true }));
+    try {
+      const notesValue = editingNotes[isbn] || '';
+      await updateJournalEntry(selectedMember.libraryCardNumber, isbn, notesValue);
+      // Update local state
+      setJournalEntries(prev => prev.map(entry => 
+        entry.isbn === isbn ? { ...entry, notes: notesValue } : entry
+      ));
+    } catch (error) {
+      console.error('Failed to save notes:', error);
+      alert('Failed to save notes: ' + error.message);
+    } finally {
+      setSavingNotes(prev => ({ ...prev, [isbn]: false }));
+    }
+  }
+
+  async function handleToggleFinished(isbn, currentFinished) {
+    setSavingFinished(prev => ({ ...prev, [isbn]: true }));
+    try {
+      const newFinished = !currentFinished;
+      await updateJournalFinished(selectedMember.libraryCardNumber, isbn, newFinished);
+      // Update local state
+      setJournalEntries(prev => prev.map(entry => 
+        entry.isbn === isbn ? { ...entry, finished: newFinished } : entry
+      ));
+    } catch (error) {
+      console.error('Failed to update finished status:', error);
+      alert('Failed to update finished status: ' + error.message);
+    } finally {
+      setSavingFinished(prev => ({ ...prev, [isbn]: false }));
+    }
+  }
+
+  // Drag and drop functions
+  function handleDragStart(e, entry) {
+    setDraggedItem(entry);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  async function handleDrop(e, targetEntry) {
+    e.preventDefault();
+    if (!draggedItem || draggedItem.isbn === targetEntry.isbn) {
+      setDraggedItem(null);
+      return;
+    }
+
+    // Reorder entries
+    const newEntries = [...journalEntries];
+    const draggedIndex = newEntries.findIndex(e => e.isbn === draggedItem.isbn);
+    const targetIndex = newEntries.findIndex(e => e.isbn === targetEntry.isbn);
+    
+    // Remove dragged item and insert at target position
+    newEntries.splice(draggedIndex, 1);
+    newEntries.splice(targetIndex, 0, draggedItem);
+    
+    // Update order numbers
+    const updatedEntries = newEntries.map((entry, idx) => ({
+      ...entry,
+      order: idx + 1
+    }));
+    
+    setJournalEntries(updatedEntries);
+    setDraggedItem(null);
+
+    // Save to backend
+    try {
+      const orderUpdates = updatedEntries.map(entry => ({
+        isbn: entry.isbn,
+        order: entry.order
+      }));
+      await reorderJournal(selectedMember.libraryCardNumber, orderUpdates);
+    } catch (error) {
+      console.error('Failed to save order:', error);
+      // Reload to get correct order
+      const journal = await getReadingJournal(selectedMember.libraryCardNumber);
+      setJournalEntries(journal);
+    }
+  }
+
+  function handleDragEnd() {
+    setDraggedItem(null);
   }
 
   return (
@@ -169,22 +293,62 @@ function ReadingJournal({ onBack }) {
         {/* Journal Content */}
         {selectedMember && (
           <div>
-            <h2 style={{
-              color: '#f5e6c8',
-              fontFamily: "'Playfair Display', Georgia, serif",
-              fontSize: '22px',
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               marginBottom: '20px',
+              flexWrap: 'wrap',
+              gap: '15px',
             }}>
-              {selectedMember.firstName}'s Reading Journey
-              <span style={{ 
-                fontSize: '14px', 
-                color: '#7a6f5d', 
-                fontWeight: 'normal',
-                marginLeft: '10px',
+              <h2 style={{
+                color: '#f5e6c8',
+                fontFamily: "'Playfair Display', Georgia, serif",
+                fontSize: '22px',
+                margin: 0,
               }}>
-                (Card #{selectedMember.libraryCardNumber})
-              </span>
-            </h2>
+                {selectedMember.firstName}'s Reading Journey
+                <span style={{ 
+                  fontSize: '14px', 
+                  color: '#7a6f5d', 
+                  fontWeight: 'normal',
+                  marginLeft: '10px',
+                }}>
+                  (Card #{selectedMember.libraryCardNumber})
+                </span>
+              </h2>
+              
+              {journalEntries.length > 0 && (
+                <button
+                  onClick={editMode ? () => setEditMode(false) : handleEditClick}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: editMode ? '#4a7c59' : 'transparent',
+                    color: editMode ? '#f5e6c8' : '#4a7c59',
+                    border: '2px solid #4a7c59',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseOver={(e) => {
+                    if (!editMode) {
+                      e.target.style.backgroundColor = '#4a7c59';
+                      e.target.style.color = '#f5e6c8';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!editMode) {
+                      e.target.style.backgroundColor = 'transparent';
+                      e.target.style.color = '#4a7c59';
+                    }
+                  }}
+                >
+                  {editMode ? '✓ Done Editing' : '✏️ Edit Journal'}
+                </button>
+              )}
+            </div>
 
             {loadingJournal ? (
               <p style={{ color: '#7a6f5d', textAlign: 'center', padding: '40px' }}>
@@ -216,25 +380,56 @@ function ReadingJournal({ onBack }) {
                   return (
                     <div
                       key={`${entry.isbn}-${index}`}
+                      draggable={editMode}
+                      onDragStart={(e) => editMode && handleDragStart(e, entry)}
+                      onDragOver={(e) => editMode && handleDragOver(e)}
+                      onDrop={(e) => editMode && handleDrop(e, entry)}
+                      onDragEnd={handleDragEnd}
                       style={{
-                        border: '1px solid #2a2a2a',
+                        position: 'relative',
+                        border: draggedItem?.isbn === entry.isbn ? '2px dashed #d4af37' : '1px solid #2a2a2a',
                         borderRadius: '12px',
                         padding: '20px',
                         backgroundColor: '#1a1a1a',
                         boxShadow: '0 4px 8px rgba(0,0,0,0.4)',
                         transition: 'all 0.3s ease',
+                        cursor: editMode ? 'grab' : 'default',
+                        opacity: draggedItem?.isbn === entry.isbn ? 0.5 : 1,
                       }}
                       onMouseOver={(e) => {
-                        e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.3)';
-                        e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.5), 0 0 20px rgba(212, 175, 55, 0.1)';
-                        e.currentTarget.style.transform = 'translateY(-4px)';
+                        if (!editMode) {
+                          e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.3)';
+                          e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.5), 0 0 20px rgba(212, 175, 55, 0.1)';
+                          e.currentTarget.style.transform = 'translateY(-4px)';
+                        }
                       }}
                       onMouseOut={(e) => {
-                        e.currentTarget.style.borderColor = '#2a2a2a';
-                        e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.4)';
-                        e.currentTarget.style.transform = 'translateY(0)';
+                        if (!editMode) {
+                          e.currentTarget.style.borderColor = '#2a2a2a';
+                          e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.4)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
                       }}
                     >
+                      {/* Ranking Badge */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        backgroundColor: '#d4af37',
+                        color: '#0a0a0a',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: '700',
+                        fontSize: '14px',
+                      }}>
+                        #{index + 1}
+                      </div>
+
                       {/* Book Cover */}
                       <div style={{
                         width: '100%',
@@ -310,8 +505,113 @@ function ReadingJournal({ onBack }) {
                         </p>
                       </div>
 
+                      {/* Finished Status */}
+                      <div style={{
+                        marginTop: '10px',
+                        padding: '10px 12px',
+                        backgroundColor: entry.finished ? 'rgba(74, 124, 89, 0.15)' : '#0a0a0a',
+                        borderRadius: '8px',
+                        border: entry.finished ? '1px solid rgba(74, 124, 89, 0.3)' : '1px solid #2a2a2a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                      }}>
+                        {editMode ? (
+                          <label 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '8px', 
+                              cursor: savingFinished[entry.isbn] ? 'wait' : 'pointer',
+                              opacity: savingFinished[entry.isbn] ? 0.7 : 1,
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={entry.finished}
+                              onChange={() => handleToggleFinished(entry.isbn, entry.finished)}
+                              disabled={savingFinished[entry.isbn]}
+                              style={{
+                                width: '18px',
+                                height: '18px',
+                                accentColor: '#4a7c59',
+                                cursor: savingFinished[entry.isbn] ? 'wait' : 'pointer',
+                              }}
+                            />
+                            <span style={{ fontSize: '13px', color: entry.finished ? '#4a7c59' : '#7a6f5d' }}>
+                              {savingFinished[entry.isbn] ? 'Saving...' : (entry.finished ? '✓ Finished reading' : 'Mark as finished')}
+                            </span>
+                          </label>
+                        ) : (
+                          <p style={{
+                            margin: 0,
+                            fontSize: '13px',
+                            color: entry.finished ? '#4a7c59' : '#7a6f5d',
+                            fontWeight: entry.finished ? '600' : 'normal',
+                          }}>
+                            {entry.finished ? '✓ Finished reading' : '📖 Currently reading'}
+                          </p>
+                        )}
+                      </div>
+
                       {/* Notes */}
-                      {entry.notes && (
+                      {editMode ? (
+                        <div style={{
+                          marginTop: '10px',
+                        }}>
+                          <label style={{
+                            display: 'block',
+                            fontSize: '12px',
+                            color: '#b8a88a',
+                            marginBottom: '5px',
+                          }}>
+                            📝 Notes:
+                          </label>
+                          <textarea
+                            value={editingNotes[entry.isbn] || ''}
+                            onChange={(e) => setEditingNotes(prev => ({
+                              ...prev,
+                              [entry.isbn]: e.target.value
+                            }))}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onDragStart={(e) => e.stopPropagation()}
+                            draggable={false}
+                            style={{
+                              width: '100%',
+                              minHeight: '80px',
+                              padding: '10px',
+                              backgroundColor: '#0a0a0a',
+                              border: '1px solid #2a2a2a',
+                              borderRadius: '8px',
+                              color: '#f5e6c8',
+                              fontSize: '12px',
+                              resize: 'vertical',
+                              fontFamily: 'inherit',
+                              boxSizing: 'border-box',
+                            }}
+                            placeholder="Add your notes about this book..."
+                          />
+                          <button
+                            onClick={() => handleSaveNotes(entry.isbn)}
+                            disabled={savingNotes[entry.isbn]}
+                            style={{
+                              marginTop: '8px',
+                              padding: '6px 12px',
+                              backgroundColor: '#4a7c59',
+                              color: '#f5e6c8',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: savingNotes[entry.isbn] ? 'wait' : 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              opacity: savingNotes[entry.isbn] ? 0.7 : 1,
+                            }}
+                          >
+                            {savingNotes[entry.isbn] ? 'Saving...' : 'Save Notes'}
+                          </button>
+                        </div>
+                      ) : entry.notes ? (
                         <div style={{
                           marginTop: '10px',
                           padding: '10px 12px',
@@ -327,7 +627,7 @@ function ReadingJournal({ onBack }) {
                             📝 {entry.notes}
                           </p>
                         </div>
-                      )}
+                      ) : null}
 
                       {/* Additional Book Details */}
                       {bookDetails && (
@@ -370,9 +670,132 @@ function ReadingJournal({ onBack }) {
                 </p>
               </div>
             )}
+
+            {editMode && (
+              <p style={{
+                marginTop: '15px',
+                color: '#7a6f5d',
+                fontSize: '13px',
+                textAlign: 'center',
+              }}>
+                💡 Tip: Drag and drop books to reorder them by your favorites
+              </p>
+            )}
           </div>
         )}
       </div>
+
+      {/* Authentication Modal */}
+      {showAuthModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+            border: '1px solid #2a2a2a',
+          }}>
+            <h3 style={{
+              color: '#f5e6c8',
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: '20px',
+              marginTop: 0,
+              marginBottom: '20px',
+            }}>
+              🔐 Verify Your Identity
+            </h3>
+            <p style={{
+              color: '#b8a88a',
+              fontSize: '14px',
+              marginBottom: '20px',
+            }}>
+              Enter your library card number to edit {selectedMember?.firstName}'s journal.
+            </p>
+            <input
+              type="number"
+              value={authInput}
+              onChange={(e) => setAuthInput(e.target.value)}
+              placeholder="Library Card Number"
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#0a0a0a',
+                border: '1px solid #2a2a2a',
+                borderRadius: '8px',
+                color: '#f5e6c8',
+                fontSize: '16px',
+                marginBottom: '10px',
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAuthSubmit();
+                }
+              }}
+              autoFocus
+            />
+            {authError && (
+              <p style={{
+                color: '#e74c3c',
+                fontSize: '13px',
+                marginBottom: '10px',
+              }}>
+                {authError}
+              </p>
+            )}
+            <div style={{
+              display: 'flex',
+              gap: '10px',
+              marginTop: '20px',
+            }}>
+              <button
+                onClick={() => setShowAuthModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: 'transparent',
+                  color: '#7a6f5d',
+                  border: '2px solid #2a2a2a',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAuthSubmit}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: '#d4af37',
+                  color: '#0a0a0a',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                }}
+              >
+                Verify
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

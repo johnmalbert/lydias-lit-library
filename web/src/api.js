@@ -111,3 +111,69 @@ export async function getReadingJournal(libraryCardNumber) {
   }
   return response.json();
 }
+
+export async function updateJournalEntry(libraryCardNumber, isbn, notes) {
+  const response = await fetch(`${API_BASE}/updateJournalEntry`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ libraryCardNumber, isbn, notes }),
+  });
+  
+  if (!response.ok) {
+    try {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update journal entry');
+    } catch (e) {
+      throw new Error(`Failed to update journal entry (${response.status}: ${response.statusText})`);
+    }
+  }
+  
+  const text = await response.text();
+  return text ? JSON.parse(text) : { success: true };
+}
+
+export async function reorderJournal(libraryCardNumber, orderUpdates) {
+  const response = await fetch(`${API_BASE}/reorderJournal`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ libraryCardNumber, orderUpdates }),
+  });
+  
+  if (!response.ok) {
+    try {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to reorder journal');
+    } catch (e) {
+      throw new Error(`Failed to reorder journal (${response.status}: ${response.statusText})`);
+    }
+  }
+  
+  const text = await response.text();
+  return text ? JSON.parse(text) : { success: true };
+}
+
+export async function updateJournalFinished(libraryCardNumber, isbn, finished) {
+  const response = await fetch(`${API_BASE}/updateJournalFinished`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ libraryCardNumber, isbn, finished }),
+  });
+  
+  if (!response.ok) {
+    try {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update finished status');
+    } catch (e) {
+      throw new Error(`Failed to update finished status (${response.status}: ${response.statusText})`);
+    }
+  }
+  
+  const text = await response.text();
+  return text ? JSON.parse(text) : { success: true };
+}

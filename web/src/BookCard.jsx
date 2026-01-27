@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import noImage from './no-image-available.png';
 
 function BookCard({ book, onCheckoutClick, onRequestClick }) {
+  const [showDescription, setShowDescription] = useState(false);
+
   return (
     <div style={{
       border: '1px solid #2a2a2a',
@@ -10,6 +12,9 @@ function BookCard({ book, onCheckoutClick, onRequestClick }) {
       backgroundColor: '#1a1a1a',
       boxShadow: '0 4px 8px rgba(0,0,0,0.4)',
       transition: 'all 0.3s ease',
+      minHeight: '620px',
+      display: 'flex',
+      flexDirection: 'column',
     }}
     onMouseOver={(e) => {
       e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.3)';
@@ -88,24 +93,70 @@ function BookCard({ book, onCheckoutClick, onRequestClick }) {
       <p style={{ fontSize: '12px', color: '#7a6f5d', margin: '5px 0' }}>
         {book.pages ? `${book.pages} pages` : 'Page count unavailable'}
       </p>
+
+      {book.description && (
+        <div style={{ margin: '8px 0' }}>
+          <button
+            onClick={() => setShowDescription(!showDescription)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#d4af37',
+              cursor: 'pointer',
+              fontSize: '12px',
+              padding: '0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span style={{
+              transform: showDescription ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease',
+              display: 'inline-block',
+            }}>▶</span>
+            {showDescription ? 'Hide Description' : 'Show Description'}
+          </button>
+          {showDescription && (
+            <p style={{
+              fontSize: '12px',
+              color: '#b8a88a',
+              margin: '8px 0',
+              padding: '10px',
+              backgroundColor: '#0a0a0a',
+              borderRadius: '6px',
+              border: '1px solid #2a2a2a',
+              lineHeight: '1.5',
+            }}>
+              {book.description}
+            </p>
+          )}
+        </div>
+      )}
       
-      <div style={{
-        marginTop: '12px',
-        padding: '12px',
-        backgroundColor: '#0a0a0a',
-        borderRadius: '8px',
-        fontSize: '13px',
-        height: '65px',
-        overflow: 'hidden',
-        border: '1px solid #2a2a2a',
-      }}>
-        <span style={{ color: '#b8a88a' }}>Location:</span> <span style={{ color: '#f5e6c8' }}>{book.location || 'Not set'}</span>
-        {book.requestedBy && (
-          <div style={{ marginTop: '6px', color: '#d4af37', fontWeight: '600' }}>
-            ✨ Requested by: {book.requestedBy}
-          </div>
-        )}
-      </div>
+      <div style={{ flex: 1 }} />
+      
+      <div style={{ marginTop: 'auto' }}>
+        <div style={{
+          padding: '12px',
+          backgroundColor: '#0a0a0a',
+          borderRadius: '8px',
+          fontSize: '13px',
+          height: '65px',
+          overflow: 'hidden',
+          border: '1px solid #2a2a2a',
+        }}>
+          <span style={{ color: '#b8a88a' }}>Location:</span> <span style={{ color: '#f5e6c8' }}>
+            {book.locationDetails 
+              ? <>{book.locationDetails.firstName} {book.locationDetails.lastInitial}<br />{book.locationDetails.city}{book.locationDetails.neighborhood ? ` (${book.locationDetails.neighborhood})` : ''}</>
+              : book.location || 'Not set'}
+          </span>
+          {book.requestedBy && (
+            <div style={{ marginTop: '6px', color: '#d4af37', fontWeight: '600' }}>
+              ✨ Requested by: {book.requestedBy}
+            </div>
+          )}
+        </div>
       
       <button
         onClick={() => onCheckoutClick(book)}
@@ -162,6 +213,7 @@ function BookCard({ book, onCheckoutClick, onRequestClick }) {
       >
         Request Book
       </button>
+      </div>
     </div>
   );
 }

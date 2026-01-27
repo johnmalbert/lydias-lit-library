@@ -10,6 +10,9 @@ require('./functions/requestBook');
 require('./functions/addLocation');
 require('./functions/getMembers');
 require('./functions/getReadingJournal');
+require('./functions/updateJournalEntry');
+require('./functions/reorderJournal');
+require('./functions/updateJournalFinished');
 
 // Export for Azure Functions
 module.exports = app;
