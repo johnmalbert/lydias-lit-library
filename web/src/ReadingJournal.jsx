@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getMembers, getReadingJournal, getBooks, updateJournalEntry, reorderJournal, updateJournalFinished } from './api';
 import noImage from './no-image-available.png';
 
@@ -19,6 +19,15 @@ function ReadingJournal({ onBack }) {
   const [savingNotes, setSavingNotes] = useState({});
   const [savingFinished, setSavingFinished] = useState({});
   const [draggedItem, setDraggedItem] = useState(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  
+  // Touch drag state
+  const [touchDragItem, setTouchDragItem] = useState(null);
+  const [touchDragPosition, setTouchDragPosition] = useState({ x: 0, y: 0 });
+  const [touchDragOffset, setTouchDragOffset] = useState({ x: 0, y: 0 });
+  const [dropTargetIsbn, setDropTargetIsbn] = useState(null);
+  const cardRefsMap = useRef(new Map());
+  const gridRef = useRef(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -42,6 +51,7 @@ function ReadingJournal({ onBack }) {
     setSelectedMember(member);
     setLoadingJournal(true);
     setEditMode(false);
+    setReorderMode(false);
     setEditingNotes({});
     try {
       const journal = await getReadingJournal(member.libraryCardNumber);
@@ -172,6 +182,106 @@ function ReadingJournal({ onBack }) {
   function handleDragEnd() {
     setDraggedItem(null);
   }
+
+  // Touch drag and drop handlers for mobile
+  const handleTouchStart = useCallback((e, entry) => {
+    if (!reorderMode) return;
+    
+    const touch = e.touches[0];
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    
+    setTouchDragItem(entry);
+    setTouchDragOffset({
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
+    });
+    setTouchDragPosition({
+      x: touch.clientX,
+      y: touch.clientY
+    });
+  }, [reorderMode]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (!touchDragItem || !reorderMode) return;
+    
+    e.preventDefault();
+    const touch = e.touches[0];
+    
+    setTouchDragPosition({
+      x: touch.clientX,
+      y: touch.clientY
+    });
+    
+    // Find which card we're over
+    let foundTarget = null;
+    cardRefsMap.current.forEach((cardEl, isbn) => {
+      if (cardEl && isbn !== touchDragItem.isbn) {
+        const rect = cardEl.getBoundingClientRect();
+        if (
+          touch.clientX >= rect.left &&
+          touch.clientX <= rect.right &&
+          touch.clientY >= rect.top &&
+          touch.clientY <= rect.bottom
+        ) {
+          foundTarget = isbn;
+        }
+      }
+    });
+    setDropTargetIsbn(foundTarget);
+  }, [touchDragItem, reorderMode]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (!touchDragItem || !reorderMode) {
+      setTouchDragItem(null);
+      setDropTargetIsbn(null);
+      return;
+    }
+    
+    if (dropTargetIsbn && dropTargetIsbn !== touchDragItem.isbn) {
+      // Perform the reorder
+      const newEntries = [...journalEntries];
+      const draggedIndex = newEntries.findIndex(e => e.isbn === touchDragItem.isbn);
+      const targetIndex = newEntries.findIndex(e => e.isbn === dropTargetIsbn);
+      
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        const [removed] = newEntries.splice(draggedIndex, 1);
+        newEntries.splice(targetIndex, 0, removed);
+        
+        const updatedEntries = newEntries.map((entry, idx) => ({
+          ...entry,
+          order: idx + 1
+        }));
+        
+        setJournalEntries(updatedEntries);
+        
+        // Save to backend
+        try {
+          const orderUpdates = updatedEntries.map(entry => ({
+            isbn: entry.isbn,
+            order: entry.order
+          }));
+          await reorderJournal(selectedMember.libraryCardNumber, orderUpdates);
+        } catch (error) {
+          console.error('Failed to save order:', error);
+          const journal = await getReadingJournal(selectedMember.libraryCardNumber);
+          setJournalEntries(journal);
+        }
+      }
+    }
+    
+    setTouchDragItem(null);
+    setDropTargetIsbn(null);
+  }, [touchDragItem, dropTargetIsbn, journalEntries, reorderMode, selectedMember]);
+
+  // Register card ref
+  const setCardRef = useCallback((isbn, el) => {
+    if (el) {
+      cardRefsMap.current.set(isbn, el);
+    } else {
+      cardRefsMap.current.delete(isbn);
+    }
+  }, []);
 
   return (
     <div style={{
@@ -319,34 +429,66 @@ function ReadingJournal({ onBack }) {
               </h2>
               
               {journalEntries.length > 0 && (
-                <button
-                  onClick={editMode ? () => setEditMode(false) : handleEditClick}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: editMode ? '#4a7c59' : 'transparent',
-                    color: editMode ? '#f5e6c8' : '#4a7c59',
-                    border: '2px solid #4a7c59',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseOver={(e) => {
-                    if (!editMode) {
-                      e.target.style.backgroundColor = '#4a7c59';
-                      e.target.style.color = '#f5e6c8';
-                    }
-                  }}
-                  onMouseOut={(e) => {
-                    if (!editMode) {
-                      e.target.style.backgroundColor = 'transparent';
-                      e.target.style.color = '#4a7c59';
-                    }
-                  }}
-                >
-                  {editMode ? '✓ Done Editing' : '✏️ Edit Journal'}
-                </button>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={editMode ? () => { setEditMode(false); setReorderMode(false); } : handleEditClick}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: editMode ? '#4a7c59' : 'transparent',
+                      color: editMode ? '#f5e6c8' : '#4a7c59',
+                      border: '2px solid #4a7c59',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseOver={(e) => {
+                      if (!editMode) {
+                        e.target.style.backgroundColor = '#4a7c59';
+                        e.target.style.color = '#f5e6c8';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!editMode) {
+                        e.target.style.backgroundColor = 'transparent';
+                        e.target.style.color = '#4a7c59';
+                      }
+                    }}
+                  >
+                    {editMode ? '✓ Done Editing' : '✏️ Edit Journal'}
+                  </button>
+                  {editMode && (
+                    <button
+                      onClick={() => setReorderMode(!reorderMode)}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: reorderMode ? '#d4af37' : 'transparent',
+                        color: reorderMode ? '#0a0a0a' : '#d4af37',
+                        border: '2px solid #d4af37',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseOver={(e) => {
+                        if (!reorderMode) {
+                          e.target.style.backgroundColor = '#d4af37';
+                          e.target.style.color = '#0a0a0a';
+                        }
+                      }}
+                      onMouseOut={(e) => {
+                        if (!reorderMode) {
+                          e.target.style.backgroundColor = 'transparent';
+                          e.target.style.color = '#d4af37';
+                        }
+                      }}
+                    >
+                      {reorderMode ? '✓ Done Reordering' : '↕️ Reorder Favorites'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -370,13 +512,125 @@ function ReadingJournal({ onBack }) {
                 </p>
               </div>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: '20px',
-              }}>
+              <div 
+                ref={gridRef}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: reorderMode 
+                    ? 'repeat(auto-fill, minmax(100px, 1fr))' 
+                    : 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: reorderMode ? '12px' : '20px',
+                }}
+              >
                 {journalEntries.map((entry, index) => {
                   const bookDetails = getBookDetails(entry.isbn);
+                  
+                  // Compact card for reorder mode
+                  if (reorderMode) {
+                    const isDragging = touchDragItem?.isbn === entry.isbn || draggedItem?.isbn === entry.isbn;
+                    const isDropTarget = dropTargetIsbn === entry.isbn;
+                    
+                    return (
+                      <div
+                        key={`${entry.isbn}-${index}`}
+                        ref={(el) => setCardRef(entry.isbn, el)}
+                        draggable={true}
+                        onDragStart={(e) => handleDragStart(e, entry)}
+                        onDragOver={(e) => handleDragOver(e)}
+                        onDrop={(e) => handleDrop(e, entry)}
+                        onDragEnd={handleDragEnd}
+                        onTouchStart={(e) => handleTouchStart(e, entry)}
+                        style={{
+                          position: 'relative',
+                          border: isDragging 
+                            ? '2px dashed #d4af37' 
+                            : isDropTarget 
+                              ? '2px solid #4a7c59' 
+                              : '2px solid #2a2a2a',
+                          borderRadius: '8px',
+                          padding: '8px',
+                          backgroundColor: isDropTarget ? 'rgba(74, 124, 89, 0.2)' : '#1a1a1a',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                          transition: 'border-color 0.15s ease, background-color 0.15s ease',
+                          cursor: 'grab',
+                          opacity: isDragging ? 0.5 : 1,
+                          touchAction: 'none',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                        }}
+                      >
+                        {/* Compact Ranking Badge */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          backgroundColor: '#d4af37',
+                          color: '#0a0a0a',
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: '700',
+                          fontSize: '11px',
+                          zIndex: 1,
+                        }}>
+                          #{index + 1}
+                        </div>
+
+                        {/* Compact Book Cover */}
+                        <div style={{
+                          width: '100%',
+                          height: '80px',
+                          borderRadius: '4px',
+                          marginBottom: '6px',
+                          backgroundColor: '#0a0a0a',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden',
+                          border: '1px solid #2a2a2a',
+                        }}>
+                          <img
+                            src={bookDetails?.cover || noImage}
+                            alt={entry.title}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'contain',
+                              pointerEvents: 'none',
+                            }}
+                            onError={(e) => {
+                              e.target.src = noImage;
+                            }}
+                          />
+                        </div>
+
+                        {/* Compact Title */}
+                        <h4 style={{
+                          margin: 0,
+                          fontSize: '11px',
+                          fontFamily: "'Playfair Display', Georgia, serif",
+                          fontWeight: '500',
+                          lineHeight: '1.3',
+                          height: '28px',
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          color: '#f5e6c8',
+                          textAlign: 'center',
+                        }}>
+                          {entry.title}
+                        </h4>
+                      </div>
+                    );
+                  }
+                  
+                  // Full card for normal view
                   return (
                     <div
                       key={`${entry.isbn}-${index}`}
@@ -671,15 +925,84 @@ function ReadingJournal({ onBack }) {
               </div>
             )}
 
-            {editMode && (
+            {editMode && !reorderMode && (
               <p style={{
                 marginTop: '15px',
                 color: '#7a6f5d',
                 fontSize: '13px',
                 textAlign: 'center',
               }}>
-                💡 Tip: Drag and drop books to reorder them by your favorites
+                💡 Tip: Click "Reorder Favorites" for easier drag and drop on mobile
               </p>
+            )}
+            {reorderMode && (
+              <p style={{
+                marginTop: '15px',
+                color: '#d4af37',
+                fontSize: '13px',
+                textAlign: 'center',
+              }}>
+                📱 Touch and drag the compact cards to reorder your favorites
+              </p>
+            )}
+            
+            {/* Floating drag preview for touch */}
+            {touchDragItem && reorderMode && (
+              <div
+                style={{
+                  position: 'fixed',
+                  left: touchDragPosition.x - touchDragOffset.x,
+                  top: touchDragPosition.y - touchDragOffset.y,
+                  width: '100px',
+                  padding: '8px',
+                  backgroundColor: '#1a1a1a',
+                  border: '2px solid #d4af37',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 24px rgba(212, 175, 55, 0.4)',
+                  zIndex: 9999,
+                  pointerEvents: 'none',
+                  opacity: 0.95,
+                }}
+              >
+                <div style={{
+                  width: '100%',
+                  height: '80px',
+                  borderRadius: '4px',
+                  marginBottom: '6px',
+                  backgroundColor: '#0a0a0a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  border: '1px solid #2a2a2a',
+                }}>
+                  <img
+                    src={getBookDetails(touchDragItem.isbn)?.cover || noImage}
+                    alt={touchDragItem.title}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                    }}
+                  />
+                </div>
+                <h4 style={{
+                  margin: 0,
+                  fontSize: '11px',
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontWeight: '500',
+                  lineHeight: '1.3',
+                  height: '28px',
+                  overflow: 'hidden',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  color: '#f5e6c8',
+                  textAlign: 'center',
+                }}>
+                  {touchDragItem.title}
+                </h4>
+              </div>
             )}
           </div>
         )}

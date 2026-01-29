@@ -39,6 +39,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocationFilters, setSelectedLocationFilters] = useState([]);
   const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const [selectedGenreFilters, setSelectedGenreFilters] = useState([]);
+  const [showGenreFilter, setShowGenreFilter] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [scanningCheckout, setScanningCheckout] = useState(false);
   const [scanError, setScanError] = useState('');
@@ -181,16 +183,44 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Get unique locations for filter options
+  // Get unique locations for filter options (with display labels)
   const uniqueLocations = React.useMemo(() => {
-    const locationSet = new Set();
+    const locationMap = new Map(); // location name -> display label
     books.forEach(book => {
       const location = (book.location || '').trim();
-      if (location) {
-        locationSet.add(location);
+      if (location && !locationMap.has(location)) {
+        // Use locationDetails if available, otherwise fall back to location name
+        if (book.locationDetails) {
+          const { city, neighborhood } = book.locationDetails;
+          const displayLabel = neighborhood ? `${city} (${neighborhood})` : city;
+          locationMap.set(location, displayLabel);
+        } else {
+          locationMap.set(location, location);
+        }
       }
     });
-    return Array.from(locationSet).sort();
+    // Return array of {value, label} sorted by label
+    return Array.from(locationMap.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [books]);
+
+  // Get unique genres for filter options
+  const uniqueGenres = React.useMemo(() => {
+    const genreSet = new Set();
+    books.forEach(book => {
+      const genres = (book.genres || '').trim();
+      if (genres) {
+        // Split by comma in case there are multiple genres
+        genres.split(',').forEach(genre => {
+          const trimmedGenre = genre.trim();
+          if (trimmedGenre) {
+            genreSet.add(trimmedGenre);
+          }
+        });
+      }
+    });
+    return Array.from(genreSet).sort((a, b) => a.localeCompare(b));
   }, [books]);
 
   // Toggle location filter selection
@@ -199,6 +229,15 @@ function App() {
       prev.includes(locationValue)
         ? prev.filter(v => v !== locationValue)
         : [...prev, locationValue]
+    );
+  };
+
+  // Toggle genre filter selection
+  const toggleGenreFilter = (genre) => {
+    setSelectedGenreFilters(prev => 
+      prev.includes(genre)
+        ? prev.filter(g => g !== genre)
+        : [...prev, genre]
     );
   };
 
@@ -220,6 +259,19 @@ function App() {
     if (selectedLocationFilters.length > 0) {
       const bookLocation = (book.location || '').trim();
       if (!selectedLocationFilters.includes(bookLocation)) {
+        return false;
+      }
+    }
+
+    // Genre filter
+    if (selectedGenreFilters.length > 0) {
+      const bookGenres = (book.genres || '').trim();
+      // Check if book has any of the selected genres
+      const bookGenreList = bookGenres.split(',').map(g => g.trim());
+      const hasMatchingGenre = selectedGenreFilters.some(selectedGenre => 
+        bookGenreList.includes(selectedGenre)
+      );
+      if (!hasMatchingGenre) {
         return false;
       }
     }
@@ -495,9 +547,9 @@ function App() {
             {showLocationFilter && (
               <>
                 <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-                  {uniqueLocations.map(locationValue => (
+                  {uniqueLocations.map(loc => (
                     <label
-                      key={locationValue}
+                      key={loc.value}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -506,18 +558,18 @@ function App() {
                         padding: '10px 14px',
                         border: '2px solid #2a2a2a',
                         borderRadius: '8px',
-                        backgroundColor: selectedLocationFilters.includes(locationValue) ? 'rgba(212, 175, 55, 0.1)' : '#141414',
-                        borderColor: selectedLocationFilters.includes(locationValue) ? '#d4af37' : '#2a2a2a',
+                        backgroundColor: selectedLocationFilters.includes(loc.value) ? 'rgba(212, 175, 55, 0.1)' : '#141414',
+                        borderColor: selectedLocationFilters.includes(loc.value) ? '#d4af37' : '#2a2a2a',
                         transition: 'all 0.2s',
                       }}
                     >
                       <input
                         type="checkbox"
-                        checked={selectedLocationFilters.includes(locationValue)}
-                        onChange={() => toggleLocationFilter(locationValue)}
+                        checked={selectedLocationFilters.includes(loc.value)}
+                        onChange={() => toggleLocationFilter(loc.value)}
                         style={{ cursor: 'pointer', accentColor: '#d4af37' }}
                       />
-                      <span style={{ fontSize: '14px', color: '#f5e6c8' }}>{locationValue}</span>
+                      <span style={{ fontSize: '14px', color: '#f5e6c8' }}>{loc.label}</span>
                     </label>
                   ))}
                 </div>
@@ -552,7 +604,104 @@ function App() {
           </div>
         )}
 
-        {(searchQuery || selectedLocationFilters.length > 0) && (
+        {uniqueGenres.length > 0 && (
+          <div style={{ marginTop: '15px' }}>
+            <div
+              onClick={() => setShowGenreFilter(!showGenreFilter)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                padding: '12px 14px',
+                backgroundColor: '#141414',
+                borderRadius: '8px',
+                border: '1px solid #2a2a2a',
+                marginBottom: showGenreFilter ? '12px' : '0',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#1a1a1a';
+                e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.3)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#141414';
+                e.currentTarget.style.borderColor = '#2a2a2a';
+              }}
+            >
+              <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#d4af37' }}>
+                {showGenreFilter ? '▼' : '▶'}
+              </span>
+              <label style={{ fontSize: '14px', fontWeight: '500', color: '#b8a88a', margin: 0, cursor: 'pointer' }}>
+                Filter by Genre
+                {selectedGenreFilters.length > 0 && (
+                  <span style={{ marginLeft: '8px', fontSize: '12px', color: '#d4af37', fontWeight: 'bold' }}>
+                    ({selectedGenreFilters.length} selected)
+                  </span>
+                )}
+              </label>
+            </div>
+            {showGenreFilter && (
+              <>
+                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                  {uniqueGenres.map(genre => (
+                    <label
+                      key={genre}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        padding: '10px 14px',
+                        border: '2px solid #2a2a2a',
+                        borderRadius: '8px',
+                        backgroundColor: selectedGenreFilters.includes(genre) ? 'rgba(212, 175, 55, 0.1)' : '#141414',
+                        borderColor: selectedGenreFilters.includes(genre) ? '#d4af37' : '#2a2a2a',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedGenreFilters.includes(genre)}
+                        onChange={() => toggleGenreFilter(genre)}
+                        style={{ cursor: 'pointer', accentColor: '#d4af37' }}
+                      />
+                      <span style={{ fontSize: '14px', color: '#f5e6c8' }}>{genre}</span>
+                    </label>
+                  ))}
+                </div>
+                {selectedGenreFilters.length > 0 && (
+                  <button
+                    onClick={() => setSelectedGenreFilters([])}
+                    style={{
+                      marginTop: '12px',
+                      padding: '8px 14px',
+                      fontSize: '13px',
+                      backgroundColor: 'transparent',
+                      border: '1px solid #7a6f5d',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      color: '#b8a88a',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseOver={(e) => {
+                      e.target.style.borderColor = '#d4af37';
+                      e.target.style.color = '#d4af37';
+                    }}
+                    onMouseOut={(e) => {
+                      e.target.style.borderColor = '#7a6f5d';
+                      e.target.style.color = '#b8a88a';
+                    }}
+                  >
+                    Clear Genre Filters
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {(searchQuery || selectedLocationFilters.length > 0 || selectedGenreFilters.length > 0) && (
           <p style={{ marginTop: '12px', fontSize: '14px', color: '#b8a88a' }}>
             Found {filteredBooks.length} book{filteredBooks.length !== 1 ? 's' : ''}
           </p>
